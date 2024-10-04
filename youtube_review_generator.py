@@ -1,23 +1,31 @@
 import streamlit as st
 import os
 from dotenv import load_dotenv
-from youtube_transcript_api import YouTubeTranscriptApi
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 import openai
 import re
 import pyperclip
+from youtube_transcript_api import YouTubeTranscriptApi
 
 # Load environment variables
 load_dotenv()
 
-# Set up OpenAI API key
+# Set up API keys
 openai.api_key = os.getenv("OPENAI_API_KEY")
+youtube_api_key = os.getenv("YOUTUBE_API_KEY")
 
 # Streamlit secrets 사용
 if not openai.api_key and 'OPENAI_API_KEY' in st.secrets:
     openai.api_key = st.secrets['OPENAI_API_KEY']
+if not youtube_api_key and 'YOUTUBE_API_KEY' in st.secrets:
+    youtube_api_key = st.secrets['YOUTUBE_API_KEY']
 
 if not openai.api_key:
     st.error("OpenAI API 키가 설정되지 않았습니다.")
+    st.stop()
+if not youtube_api_key:
+    st.error("YouTube API 키가 설정되지 않았습니다.")
     st.stop()
 
 # Set page config for full screen
@@ -68,27 +76,14 @@ def get_youtube_id(url):
     
     return None
 
+            
 def get_transcript(video_id):
     try:
-        transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['ko'])
-        return " ".join([entry['text'] for entry in transcript])
+        transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['ko', 'en'])
+        return ' '.join([entry['text'] for entry in transcript])
     except Exception as e:
-        try:
-            transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['en'])
-            return " ".join([entry['text'] for entry in transcript])
-        except Exception as e:
-            try:
-                transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-                available_transcripts = list(transcript_list)
-                if available_transcripts:
-                    transcript = available_transcripts[0].fetch()
-                    return " ".join([entry['text'] for entry in transcript])
-                else:
-                    return None
-            except Exception as e:
-                st.error(f"자막을 가져오는 데 실패했습니다: {str(e)}")
-                st.info("이 동영상에 자막이 없거나 비활성화되어 있을 수 있습니다. 다른 동영상을 시도해보세요.")
-                return None
+        st.error(f"자막을 가져오는 데 실패했습니다: {str(e)}")
+        return None
 
 def generate_review(transcript, keywords, length_option):
     length_map = {
@@ -160,7 +155,6 @@ def main():
 
     with col3:
         length_option = st.selectbox("글 길이", ["짧게 (100자)", "보통 (200자)", "길게 (300자)"], index=1, help="생성될 관람평의 길이를 선택하세요.")
-
 
     if st.button("🔍 자막 불러오기", help="입력한 URL에서 자막을 가져옵니다."):
         if url:
