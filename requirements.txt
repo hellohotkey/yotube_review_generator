@@ -1,6 +1,6 @@
 streamlit
 python-dotenv
 openai
-youtube_transcript_api
+youtube_transcript_api==0.6.1
 pyperclip
 requests
