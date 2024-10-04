@@ -80,10 +80,18 @@ def get_youtube_id(url):
 def get_transcript(video_id):
     try:
         transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['ko', 'en'])
-        return ' '.join([entry['text'] for entry in transcript])
+        return transcript_to_text(transcript)
     except Exception as e:
         st.error(f"자막을 가져오는 데 실패했습니다: {str(e)}")
         return None
+    
+def transcript_to_text(transcript):
+    text = ""
+    for item in transcript:
+        text += item['text'] + " "
+        if item['text'].endswith(('.', '!', '?')):
+            text += "\n\n"
+    return text.strip()
 
 def generate_review(transcript, keywords, length_option):
     length_map = {
@@ -164,6 +172,7 @@ def main():
                     transcript = get_transcript(video_id)
                     if transcript:
                         st.session_state.transcript = transcript
+                        st.success("자막을 성공적으로 불러왔습니다.")
                     else:
                         st.error("이 비디오에서 자막을 찾을 수 없습니다.")
             else:
