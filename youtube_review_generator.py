@@ -54,19 +54,26 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-def extract_video_id(video_url: str) -> str:
-    pattern = r'(https?://)?(www\.)?(youtube|youtu|youtube-nocookie)\.(com|be)/(watch\?v=|embed/|v/|.+\?v=)?([^&=%\?]{11})'
-    match = re.search(pattern, video_url)
-    if match is None:
-        st.error("올바르지 않은 YouTube URL입니다. 유효한 YouTube 동영상 URL을 입력해주세요.")
-        return None
-    return match.group(6)
+def extract_video_id(url: str) -> str:
+    patterns = [
+        r'(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?v=([^&]+)',
+        r'(?:https?:\/\/)?(?:www\.)?youtu\.be\/([^?]+)',
+        r'(?:https?:\/\/)?(?:www\.)?youtube\.com\/embed\/([^?]+)',
+        r'(?:https?:\/\/)?(?:www\.)?youtube\.com\/v\/([^?]+)',
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1)
+    
+    return None
 
 def fetch_transcript(video_id: str) -> str:
     try:
         transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['ko', 'en'])
         return transcript_to_text(transcript)
-    except (TranscriptsDisabled, NoTranscriptFound) as e:
+    except (TranscriptsDisabled, NoTranscriptFound):
         st.error("이 동영상에 대한 자막을 찾을 수 없습니다.")
     except Exception as e:
         st.error(f"자막을 가져오는 데 실패했습니다: {str(e)}")
@@ -117,6 +124,7 @@ def generate_review(transcript, keywords, length_option):
 
 def copy_to_clipboard(text):
     pyperclip.copy(text)
+    st.success("관람평이 클립보드에 복사되었습니다!")
 
 def calculate_cost(usage):
     input_cost_per_1m = 0.150
@@ -183,7 +191,8 @@ def main():
             if 'review' in st.session_state:
                 st.subheader("관람평")
                 st.text_area("", st.session_state.review, height=300)
-                st.button("📋 관람평 복사하기", help="생성된 관람평을 클립보드에 복사합니다.", on_click=copy_to_clipboard, args=(st.session_state.review,))
+                if st.button("📋 관람평 복사하기", help="생성된 관람평을 클립보드에 복사합니다."):
+                    copy_to_clipboard(st.session_state.review)
                 
                 if 'usage' in st.session_state:
                     usage = st.session_state.usage
