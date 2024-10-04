@@ -13,12 +13,39 @@ def get_video_info(url: str) -> tuple:
         info = ydl.extract_info(url, download=False)
         return info.get('title', ''), info.get('description', '')
 
-def fetch_transcript(video_id: str) -> str:
+def fetch_transcript_with_api(video_id: str) -> str:
     try:
         transcript = YouTubeTranscriptApi.get_transcript(video_id)
         return ' '.join(entry['text'] for entry in transcript)
     except Exception as e:
-        return f"자막을 가져오는 데 실패했습니다: {str(e)}"
+        st.warning(f"YouTube Transcript API로 자막 추출 실패: {str(e)}")
+        return None
+
+def fetch_transcript_with_ytdlp(url: str) -> str:
+    ydl_opts = {
+        'writesubtitles': True,
+        'writeautomaticsub': True,
+        'subtitleslangs': ['ko', 'en'],
+        'skip_download': True,
+        'outtmpl': '%(id)s.%(ext)s'
+    }
+    
+    with YoutubeDL(ydl_opts) as ydl:
+        try:
+            info = ydl.extract_info(url, download=False)
+            if 'subtitles' in info:
+                for lang in ['ko', 'en']:
+                    if lang in info['subtitles']:
+                        subtitle = info['subtitles'][lang][0]['data']
+                        return ' '.join(line for line in subtitle.splitlines() if line and not line[0].isdigit())
+            if 'automatic_captions' in info:
+                for lang in ['ko', 'en']:
+                    if lang in info['automatic_captions']:
+                        subtitle = info['automatic_captions'][lang][0]['data']
+                        return ' '.join(line for line in subtitle.splitlines() if line and not line[0].isdigit())
+        except Exception as e:
+            st.error(f"yt-dlp로 자막 추출 실패: {str(e)}")
+    return None
 
 st.title("YouTube 자막 추출기")
 
@@ -32,15 +59,21 @@ if st.button("자막 가져오기"):
                 title, description = get_video_info(url)
                 st.subheader(f"비디오 제목: {title}")
                 
-                transcript = fetch_transcript(video_id)
-                st.text_area("추출된 자막", transcript, height=300)
+                transcript = fetch_transcript_with_api(video_id)
+                if not transcript:
+                    st.info("YouTube Transcript API 실패. yt-dlp로 시도 중...")
+                    transcript = fetch_transcript_with_ytdlp(url)
                 
-                st.download_button(
-                    label="자막 다운로드",
-                    data=transcript,
-                    file_name=f"{title}_transcript.txt",
-                    mime="text/plain"
-                )
+                if transcript:
+                    st.text_area("추출된 자막", transcript, height=300)
+                    st.download_button(
+                        label="자막 다운로드",
+                        data=transcript,
+                        file_name=f"{title}_transcript.txt",
+                        mime="text/plain"
+                    )
+                else:
+                    st.error("자막을 추출할 수 없습니다.")
             except Exception as e:
                 st.error(f"오류 발생: {str(e)}")
         else:
