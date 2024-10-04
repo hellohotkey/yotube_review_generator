@@ -12,6 +12,14 @@ load_dotenv()
 # Set up OpenAI API key
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
+# Streamlit secrets 사용
+if not openai.api_key and 'OPENAI_API_KEY' in st.secrets:
+    openai.api_key = st.secrets['OPENAI_API_KEY']
+
+if not openai.api_key:
+    st.error("OpenAI API 키가 설정되지 않았습니다.")
+    st.stop()
+
 # Set page config for full screen
 st.set_page_config(layout="wide")
 
@@ -71,14 +79,15 @@ def get_transcript(video_id):
         except Exception as e:
             try:
                 transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-                available_languages = [tr.language_code for tr in transcript_list]
-                if available_languages:
-                    transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=[available_languages[0]])
+                available_transcripts = list(transcript_list)
+                if available_transcripts:
+                    transcript = available_transcripts[0].fetch()
                     return " ".join([entry['text'] for entry in transcript])
                 else:
                     return None
             except Exception as e:
                 st.error(f"자막을 가져오는 데 실패했습니다: {str(e)}")
+                st.info("이 동영상에 자막이 없거나 비활성화되어 있을 수 있습니다. 다른 동영상을 시도해보세요.")
                 return None
 
 def generate_review(transcript, keywords, length_option):
@@ -94,7 +103,7 @@ def generate_review(transcript, keywords, length_option):
         다음 지침을 따라 자연스러운 관람평을 작성해주세요:
         
         1. 영상을 실제로 본 것처럼 개인적인 느낌과 감상을 자유롭게 표현하세요.
-        2. 인상 깊었던 점, 좋았던 점, 아쉬웠던 점 등을 포함해주세요.
+        2. 인상 깊었던 점, 좋았던 점, 응원의 말 등을 포함해주세요.
         3. 다음 키워드를 자연스럽게 포함시켜주세요: {', '.join(keywords)}
         4. 일반 시청자의 눈높이에 맞춰 쉽고 친근한 언어로 작성해주세요.
         5. 적절한 이모티콘을 사용하여 글에 생동감을 더해주세요.
