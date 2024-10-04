@@ -67,8 +67,8 @@ def fetch_transcript(video_id: str) -> str:
         items = response.json().get('items', [])
         if items:
             caption_id = items[0]['id']
-            caption_url = f"https://www.googleapis.com/youtube/v3/captions/{caption_id}?key={youtube_api_key}&tfmt=plain"
-            caption_response = requests.get(caption_url)
+            caption_url = f"https://www.googleapis.com/youtube/v3/captions/{caption_id}?key={youtube_api_key}&tfmt=srt"
+            caption_response = requests.get(caption_url, headers={"Accept": "application/json"})
             if caption_response.status_code == 200:
                 return caption_response.text
     st.error("이 동영상의 자막을 가져올 수 없습니다.")
