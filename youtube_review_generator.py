@@ -5,6 +5,8 @@ import openai
 import re
 import pyperclip
 import requests
+from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound, VideoUnavailable
 
 # Load environment variables
 load_dotenv()
@@ -61,6 +63,16 @@ def check_video_availability(video_id: str) -> bool:
     return False
 
 def fetch_transcript(video_id: str) -> str:
+    # Attempt to fetch transcript using youtube-transcript-api
+    try:
+        transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['ko', 'en'])
+        return transcript_to_text(transcript)
+    except (TranscriptsDisabled, NoTranscriptFound, VideoUnavailable):
+        st.warning("유튜브 트랜스크립트 API로 자막을 가져오지 못했습니다. YouTube Data API로 시도합니다...")
+    except Exception as e:
+        st.warning(f"유튜브 트랜스크립트 API 오류: {str(e)}. YouTube Data API로 시도합니다...")
+
+    # Fallback to YouTube Data API if youtube-transcript-api fails
     url = f"https://www.googleapis.com/youtube/v3/captions?videoId={video_id}&key={youtube_api_key}&part=snippet"
     response = requests.get(url)
     if response.status_code == 200:
@@ -74,6 +86,9 @@ def fetch_transcript(video_id: str) -> str:
                     return caption_response.text
     st.error("이 동영상의 자막을 가져올 수 없습니다.")
     return None
+
+def transcript_to_text(transcript):
+    return " ".join(item['text'] for item in transcript)
 
 def generate_review(transcript, keywords, length_option):
     length_map = {
