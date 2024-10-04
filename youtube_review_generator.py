@@ -67,8 +67,12 @@ def fetch_transcript(video_id: str) -> str:
     try:
         transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['ko', 'en'])
         return transcript_to_text(transcript)
-    except (TranscriptsDisabled, NoTranscriptFound, VideoUnavailable):
-        st.warning("유튜브 트랜스크립트 API로 자막을 가져오지 못했습니다. YouTube Data API로 시도합니다...")
+    except TranscriptsDisabled:
+        st.warning("이 동영상의 자막이 비활성화되어 있습니다. YouTube Data API로 시도합니다...")
+    except NoTranscriptFound:
+        st.warning("이 동영상에 대한 자막을 찾을 수 없습니다. YouTube Data API로 시도합니다...")
+    except VideoUnavailable:
+        st.warning("이 비디오를 찾을 수 없거나 접근할 수 없습니다. YouTube Data API로 시도합니다...")
     except Exception as e:
         st.warning(f"유튜브 트랜스크립트 API 오류: {str(e)}. YouTube Data API로 시도합니다...")
 
@@ -84,6 +88,8 @@ def fetch_transcript(video_id: str) -> str:
                 caption_response = requests.get(caption_url, headers={"Accept": "application/json"})
                 if caption_response.status_code == 200:
                     return caption_response.text
+                else:
+                    st.warning(f"자막 다운로드에 실패했습니다: {caption_response.status_code} - {caption_response.reason}")
     st.error("이 동영상의 자막을 가져올 수 없습니다.")
     return None
 
