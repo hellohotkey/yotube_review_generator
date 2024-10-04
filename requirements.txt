@@ -1,5 +1,5 @@
-youtube_transcript_api
-openai
-pyperclip
-python-dotenv
 streamlit
+python-dotenv
+openai
+youtube_transcript_api
+pyperclip
