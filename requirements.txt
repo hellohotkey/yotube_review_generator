@@ -1,6 +1,6 @@
 # requirements.txt
 streamlit==1.22.0
 python-dotenv==1.0.0
-youtube_transcript_api==0.6.0
+youtube_transcript_api
 openai==0.27.8
 pyperclip
