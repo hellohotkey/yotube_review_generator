@@ -5,17 +5,14 @@ import openai
 import re
 import pyperclip
 from youtube_transcript_api import YouTubeTranscriptApi
-from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound
+from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound, VideoUnavailable
+import requests
 
 # Load environment variables
 load_dotenv()
 
 # Set up API keys
-openai.api_key = os.getenv("OPENAI_API_KEY")
-
-# Streamlit secrets 사용
-if not openai.api_key and 'OPENAI_API_KEY' in st.secrets:
-    openai.api_key = st.secrets['OPENAI_API_KEY']
+openai.api_key = os.getenv("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY")
 
 if not openai.api_key:
     st.error("OpenAI API 키가 설정되지 않았습니다.")
@@ -27,30 +24,12 @@ st.set_page_config(layout="wide")
 # Custom CSS for better UI
 st.markdown("""
 <style>
-    .stApp {
-        max-width: 100%;
-        padding-top: 2rem;
-    }
-    .stButton>button {
-        width: 100%;
-        background-color: #ff4b4b !important;
-        color: white;
-    }
-    .stButton>button:hover {
-        background-color: #ff7171 !important;
-        color: white;
-    }
-    .stTextInput>div>div>input {
-        font-size: 1.2rem;
-    }
-    .stTextArea>div>textarea {
-        font-size: 1.1rem;
-    }
-    .divider {
-        margin-top: 1rem;
-        margin-bottom: 1rem;
-        border-top: 1px solid #e0e0e0;
-    }
+    .stApp { max-width: 100%; padding-top: 2rem; }
+    .stButton>button { width: 100%; background-color: #ff4b4b !important; color: white; }
+    .stButton>button:hover { background-color: #ff7171 !important; }
+    .stTextInput>div>div>input { font-size: 1.2rem; }
+    .stTextArea>div>textarea { font-size: 1.1rem; }
+    .divider { margin: 1rem 0; border-top: 1px solid #e0e0e0; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -69,23 +48,31 @@ def extract_video_id(url: str) -> str:
     
     return None
 
+def check_video_availability(video_id: str) -> bool:
+    url = f"https://www.youtube.com/oembed?format=json&url=https://www.youtube.com/watch?v={video_id}"
+    response = requests.get(url)
+    return response.status_code == 200
+
 def fetch_transcript(video_id: str) -> str:
     try:
+        if not check_video_availability(video_id):
+            st.error("이 비디오를 찾을 수 없거나 접근할 수 없습니다.")
+            return None
+
         transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['ko', 'en'])
         return transcript_to_text(transcript)
-    except (TranscriptsDisabled, NoTranscriptFound):
+    except TranscriptsDisabled:
+        st.error("이 동영상의 자막이 비활성화되어 있습니다.")
+    except NoTranscriptFound:
         st.error("이 동영상에 대한 자막을 찾을 수 없습니다.")
+    except VideoUnavailable:
+        st.error("이 비디오를 찾을 수 없거나 접근할 수 없습니다.")
     except Exception as e:
         st.error(f"자막을 가져오는 데 실패했습니다: {str(e)}")
     return None
 
 def transcript_to_text(transcript):
-    text = ""
-    for item in transcript:
-        text += item['text'] + " "
-        if item['text'].endswith(('.', '!', '?')):
-            text += "\n\n"
-    return text.strip()
+    return " ".join(item['text'] for item in transcript)
 
 def generate_review(transcript, keywords, length_option):
     length_map = {
@@ -96,9 +83,7 @@ def generate_review(transcript, keywords, length_option):
     target_length = length_map[length_option]
 
     try:
-        prompt = f"""당신은 YouTube 동영상을 시청한 후 관람평 이벤트에 응모하는 일반 시청자입니다. 
-        다음 지침을 따라 자연스러운 관람평을 작성해주세요:
-        
+        prompt = f"""YouTube 동영상 관람평을 작성해주세요. 다음 지침을 따라주세요:
         1. 영상을 실제로 본 것처럼 개인적인 느낌과 감상을 자유롭게 표현하세요.
         2. 인상 깊었던 점, 좋았던 점, 응원의 말 등을 포함해주세요.
         3. 다음 키워드를 자연스럽게 포함시켜주세요: {', '.join(keywords)}
@@ -165,8 +150,6 @@ def main():
                     if transcript:
                         st.session_state.transcript = transcript
                         st.success("자막을 성공적으로 불러왔습니다.")
-                    else:
-                        st.error("이 비디오에서 자막을 찾을 수 없습니다.")
             else:
                 st.error("올바른 YouTube URL을 입력해주세요.")
         else:
