@@ -1,2 +1,5 @@
 streamlit
-yt-dlp
+python-dotenv
+openai
+requests
+pyperclip
