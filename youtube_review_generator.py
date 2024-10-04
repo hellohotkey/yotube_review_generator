@@ -1,31 +1,24 @@
 import streamlit as st
 import os
 from dotenv import load_dotenv
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
 import openai
 import re
 import pyperclip
 from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound
 
 # Load environment variables
 load_dotenv()
 
 # Set up API keys
 openai.api_key = os.getenv("OPENAI_API_KEY")
-youtube_api_key = os.getenv("YOUTUBE_API_KEY")
 
 # Streamlit secrets 사용
 if not openai.api_key and 'OPENAI_API_KEY' in st.secrets:
     openai.api_key = st.secrets['OPENAI_API_KEY']
-if not youtube_api_key and 'YOUTUBE_API_KEY' in st.secrets:
-    youtube_api_key = st.secrets['YOUTUBE_API_KEY']
 
 if not openai.api_key:
     st.error("OpenAI API 키가 설정되지 않았습니다.")
-    st.stop()
-if not youtube_api_key:
-    st.error("YouTube API 키가 설정되지 않았습니다.")
     st.stop()
 
 # Set page config for full screen
@@ -61,30 +54,24 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-def get_youtube_id(url):
-    patterns = [
-        r'(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?v=([^&]+)',
-        r'(?:https?:\/\/)?(?:www\.)?youtu\.be\/([^?]+)',
-        r'(?:https?:\/\/)?(?:www\.)?youtube\.com\/embed\/([^?]+)',
-        r'(?:https?:\/\/)?(?:www\.)?youtube\.com\/v\/([^?]+)',
-    ]
-    
-    for pattern in patterns:
-        match = re.search(pattern, url)
-        if match:
-            return match.group(1)
-    
-    return None
+def extract_video_id(video_url: str) -> str:
+    pattern = r'(https?://)?(www\.)?(youtube|youtu|youtube-nocookie)\.(com|be)/(watch\?v=|embed/|v/|.+\?v=)?([^&=%\?]{11})'
+    match = re.search(pattern, video_url)
+    if match is None:
+        st.error("올바르지 않은 YouTube URL입니다. 유효한 YouTube 동영상 URL을 입력해주세요.")
+        return None
+    return match.group(6)
 
-            
-def get_transcript(video_id):
+def fetch_transcript(video_id: str) -> str:
     try:
         transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['ko', 'en'])
         return transcript_to_text(transcript)
+    except (TranscriptsDisabled, NoTranscriptFound) as e:
+        st.error("이 동영상에 대한 자막을 찾을 수 없습니다.")
     except Exception as e:
         st.error(f"자막을 가져오는 데 실패했습니다: {str(e)}")
-        return None
-    
+    return None
+
 def transcript_to_text(transcript):
     text = ""
     for item in transcript:
@@ -132,7 +119,6 @@ def copy_to_clipboard(text):
     pyperclip.copy(text)
 
 def calculate_cost(usage):
-    # GPT-4o mini 가격 (1M 토큰당 가격, 2023년 10월 기준)
     input_cost_per_1m = 0.150
     output_cost_per_1m = 0.600
 
@@ -143,8 +129,6 @@ def calculate_cost(usage):
     output_cost = (output_tokens / 1000000) * output_cost_per_1m
 
     total_cost = input_cost + output_cost
-
-    # 환율 적용 (1 USD = 1300 KRW)
     total_cost_krw = total_cost * 1300
 
     return total_cost_krw
@@ -164,12 +148,12 @@ def main():
     with col3:
         length_option = st.selectbox("글 길이", ["짧게 (100자)", "보통 (200자)", "길게 (300자)"], index=1, help="생성될 관람평의 길이를 선택하세요.")
 
-    if st.button("🔍 자막 불러오기", help="입력한 URL에서 자막을 가져옵니다."):
+    if st.button("🔍 자막 가져오기", help="입력한 URL에서 자막을 가져옵니다."):
         if url:
-            video_id = get_youtube_id(url)
+            video_id = extract_video_id(url)
             if video_id:
                 with st.spinner("자막을 가져오는 중입니다..."):
-                    transcript = get_transcript(video_id)
+                    transcript = fetch_transcript(video_id)
                     if transcript:
                         st.session_state.transcript = transcript
                         st.success("자막을 성공적으로 불러왔습니다.")
